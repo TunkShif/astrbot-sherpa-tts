@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from astrbot.api import logger
@@ -23,6 +24,7 @@ from astrbot.api.message_components import Record
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
+from .model_download import download_model_async, spec_for_precision
 from .tts.engine import ModelNotReadyError, SherpaTtsEngine, TtsError, new_audio_path
 from .tts.text import count_sentences
 
@@ -60,6 +62,18 @@ class SherpaTtsPlugin(Star):
         )
         self.admin_bypass = bool(self.config.get("admin_bypass", True))
 
+        self._auto_download = bool(self.config.get("auto_download_model", True))
+        self._download_base_url = str(
+            self.config.get("model_download_base_url", "") or "",
+        )
+        self._custom_model_dir = bool(self.config.get("model_dir"))
+        self._download_task: asyncio.Task[None] | None = None
+        self._download_progress = 0.0
+        self._download_status = "idle"
+        self._download_error = ""
+        self._download_attempt_at = 0.0
+        self._last_download_log_pct = -1
+
         self.engine = SherpaTtsEngine(
             model_dir,
             speaker_id=int(self.config.get("speaker_id", 3)),
@@ -86,8 +100,13 @@ class SherpaTtsPlugin(Star):
         never use TTS do not pay the ~300 MB model load cost.
         """
         self._cleanup_stale_audio()
+        self._maybe_start_model_download()
+
         if not self.config.get("auto_load", False):
             logger.info("[sherpa-tts] 模型将按需加载: %s", self.engine.model_dir)
+            return
+        if self._download_task and not self._download_task.done():
+            logger.info("[sherpa-tts] 模型下载完成后自动加载")
             return
         try:
             await asyncio.wait_for(
@@ -99,7 +118,99 @@ class SherpaTtsPlugin(Star):
             logger.warning("[sherpa-tts] 模型预加载失败（首次使用时重试）: %s", exc)
 
     async def terminate(self) -> None:
+        task = self._download_task
+        if task and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
         self.engine.close()
+
+    # ------------------------------------------------------- model download
+    def _maybe_start_model_download(self) -> None:
+        """Start one background download if the default model is missing."""
+        if not self._auto_download or self._custom_model_dir:
+            return
+        if self._download_task and not self._download_task.done():
+            return
+        if not self.engine.missing_files():
+            return
+        self._download_task = asyncio.create_task(self._download_model())
+
+    def _on_download_progress(self, done: int, total: int) -> None:
+        self._download_progress = done / total if total else 0.0
+        percent = int(self._download_progress * 100)
+        if percent >= self._last_download_log_pct + 10:
+            logger.info(
+                "[sherpa-tts] 模型下载 %d%%（%d/%d MiB）",
+                percent,
+                done // 2**20,
+                total // 2**20,
+            )
+            self._last_download_log_pct = percent
+
+    async def _download_model(self) -> None:
+        spec = spec_for_precision(self.engine.precision)
+        self._download_status = "downloading"
+        self._download_error = ""
+        self._download_progress = 0.0
+        self._download_attempt_at = time.monotonic()
+        self._last_download_log_pct = -1
+        logger.info(
+            "[sherpa-tts] 模型缺失，开始后台下载 %s（%d MiB）",
+            spec.variant,
+            spec.size // 2**20,
+        )
+        try:
+            path = await download_model_async(
+                self.data_dir / "models",
+                spec.variant,
+                base_url=self._download_base_url or None,
+                progress=self._on_download_progress,
+            )
+            self.engine.model_dir = path
+            self._download_status = "ready"
+            self._download_progress = 1.0
+            logger.info("[sherpa-tts] 模型下载完成: %s", path)
+            if self.config.get("auto_load", False):
+                try:
+                    await asyncio.to_thread(self.engine.ensure_ready)
+                except TtsError as exc:
+                    # The download succeeded; a warm-up failure should not
+                    # make the model look missing.  First TTS retries loading.
+                    logger.warning("[sherpa-tts] 下载完成但预加载失败: %s", exc)
+                else:
+                    logger.info("[sherpa-tts] 模型加载完成: %s", path)
+        except asyncio.CancelledError:
+            self._download_status = "cancelled"
+            logger.info("[sherpa-tts] 模型下载已取消，下次启动会续传")
+            raise
+        except Exception as exc:
+            # aiohttp errors, disk errors, extraction errors: never let the
+            # background task die silently or leave status stuck on downloading.
+            self._download_status = "failed"
+            self._download_error = str(exc)
+            logger.error("[sherpa-tts] 模型下载失败: %s", exc)
+
+    def _ensure_model_available(self) -> None:
+        missing = self.engine.missing_files()
+        if not missing:
+            return
+        if self._download_task and not self._download_task.done():
+            raise TtsError(
+                f"模型正在下载（{self._download_progress * 100:.0f}%），请稍后再试。",
+            )
+        if self._auto_download and not self._custom_model_dir:
+            elapsed = time.monotonic() - self._download_attempt_at
+            if self._download_status == "failed" and elapsed < 60:
+                raise TtsError(
+                    f"模型下载失败：{self._download_error}；"
+                    f"约 {int(60 - elapsed) + 1} 秒后重试。",
+                )
+            self._maybe_start_model_download()
+            raise TtsError("模型尚未就绪，已开始后台下载，请稍后再试。")
+        raise TtsError(
+            f"模型文件不完整：{', '.join(missing)}。请下载模型或检查 model_dir 设置。",
+        )
 
     # ---------------------------------------------------------------- helpers
     def _command_text(self, event: AstrMessageEvent) -> str:
@@ -227,6 +338,7 @@ class SherpaTtsPlugin(Star):
         except (TypeError, ValueError) as exc:
             raise TtsError("语速 speed 必须是数字") from exc
         text = self._check_text(text, speed)
+        self._ensure_model_available()
         self._check_cooldown(event)
         await self._acquire_infer_slot()
         try:

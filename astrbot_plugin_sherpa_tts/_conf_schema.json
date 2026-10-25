@@ -21,6 +21,18 @@
     ],
     "hint": "auto：目录里有 model.onnx 就用它，否则用 model.int8.onnx。完整模型对中英混合更稳；int8 体积约 1/3，x86 上可能更快，建议在本机实测。修改后需重载插件。"
   },
+  "auto_download_model": {
+    "description": "激活时自动下载模型",
+    "type": "bool",
+    "default": true,
+    "hint": "插件加载/启用时若默认模型目录缺失，会在后台下载（fp32 约 365MB，int8 约 147MB），不阻塞 AstrBot 启动。仅在 model_dir 留空时生效；下载失败会在首次 /tts 时提示。"
+  },
+  "model_download_base_url": {
+    "description": "模型下载镜像/代理地址",
+    "type": "string",
+    "default": "",
+    "hint": "留空使用 https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models。国内网络慢时可填镜像前缀（末尾不要加 /）。"
+  },
   "auto_load": {
     "description": "启动时预加载模型",
     "type": "bool",

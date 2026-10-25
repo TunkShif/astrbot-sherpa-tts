@@ -3,3 +3,4 @@
 # supports both, but v1.13 + the full model is the tested quality baseline.
 sherpa-onnx>=1.13.0,<2.0.0
 numpy>=1.24
+aiohttp>=3.9.0
