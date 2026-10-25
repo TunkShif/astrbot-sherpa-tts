@@ -82,6 +82,20 @@
 8. `yield event.chain_result([Record.fromFileSystem(path)])`。
 9. Pipeline 发送消息；事件结束时 AstrBot 删除临时 WAV。
 
+### 插件生命周期与下载时机
+
+AstrBot 在插件成功 import/实例化之后、触发 `OnPluginLoadedEvent` 之前，会 **await** 插件的 `initialize()`。这就是“安装/启用后”的可靠时机，不需要等第一次 TTS：
+
+```text
+plugin import -> instantiate -> bind handlers -> initialize() -> OnPluginLoadedEvent
+```
+
+- **`initialize()`**：启动后台模型下载任务后立即返回；不能在这里 `await` 365MB 下载，否则插件加载会卡住。
+- **`OnPluginLoadedEvent`**（`@filter.on_plugin_loaded`）：在 `initialize()` 之后触发，且会对所有插件加载触发；可以用来做额外通知，但启动下载用 `initialize()` 更直接。
+- **`OnAstrBotLoadedEvent`**（`@filter.on_astrbot_loaded`）：只在 AstrBot 整体启动完成时触发；之后从插件市场安装/热重载插件不会触发，不能作为下载时机。
+- **`terminate()`**：插件禁用/卸载/重载时取消后台下载任务；已下载的 `.part` 保留，下次启用断点续传。
+- 没有独立的“安装完成”事件；AstrBot 的安装流程最终会加载并启用插件，因此 `initialize()` 就是实际可用的激活钩子。
+
 ### `sherpa_tts` LLM 工具
 
 与指令共用 3–7 步，然后：
@@ -171,6 +185,7 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
 | 内容 | 路径 | 生命周期 |
 | --- | --- | --- |
 | 模型 | `data/plugin_data/astrbot_plugin_sherpa_tts/models/` | 持久 |
+| 下载中的 `.part` | `.../models/.<archive>.part` | 成功后删除；失败/取消保留以续传 |
 | 生成 WAV | `data/temp/astrbot_plugin_sherpa_tts/` | 事件结束删除 |
 | 插件配置 | `data/config/astrbot_plugin_sherpa_tts_config.json` | 持久 |
 
@@ -185,6 +200,10 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
 ## 7. 模型管理
 
 - 插件仓库不包含模型，`requirements.txt` 只包含库依赖。
+- **激活自动下载**：`initialize()` 检测默认模型目录缺失后，创建后台 `asyncio.Task` 调用 `model_download.download_model_async()`；`initialize()` 不等待下载。默认 `auto_download_model=true`，`model_dir` 为空时生效；手动设置 `model_dir` 视为用户管理，不自动写入。
+- **下载状态机**：`idle -> downloading -> ready | failed | cancelled`；下载中 `/tts` 返回百分比，失败后首次 `/tts` 返回错误，约 60 秒后再次触发重试。
+- **断点续传**：下载写入 `.<archive>.part`，HTTP `Range` 续传；SHA-256 校验通过后才解压到 staging 目录，再原子替换最终模型目录，避免半个模型。
+- **镜像**：`model_download_base_url` 可替换 release 前缀；脚本 `--base-url` 同样支持。
 - `model_precision = auto | fp32 | int8`：
   - `auto`：优先 `model.onnx`，缺失时回退 `model.int8.onnx`；
   - `fp32`：311MB，质量最好，中英混合更稳；
@@ -200,7 +219,7 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
 
 完整表格见 [README 配置](../README.md#配置)。设计上分四组：
 
-1. **模型**：`model_dir`、`model_precision`、`auto_load`、`load_timeout`、`debug`。
+1. **模型**：`model_dir`、`model_precision`、`auto_download_model`、`model_download_base_url`、`auto_load`、`load_timeout`、`debug`。
 2. **声音**：`speaker_id`、`speed`、`num_threads`。
 3. **限额**：`max_sentences`、`max_total_chars`、`max_chars`。
 4. **保护**：`cooldown_seconds`、`queue_timeout`、`max_queue`、`admin_bypass`。
@@ -232,6 +251,7 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
 | 音频生命周期 | `data/temp` + event tracking | AstrBot 原生清理，不落插件数据 |
 | LLM 工具注册 | `@filter.llm_tool`，所有参数给默认值 | 参数少、代码少；装饰器 schema 无 `required`，需自校验 |
 | 模型精度默认 | `auto`（优先 fp32） | 质量/稳定优先；int8 可显式选择 |
+| 模型下载时机 | `initialize()` 后台任务 | 激活即下载；不阻塞启动；首 TTS 作为失败回退 |
 | sherpa-onnx 版本 | `<2` | 保留 OOV 英文回退；2.0 行为变化 |
 | 许可证 | MIT | 宽松、适合社区插件 |
 

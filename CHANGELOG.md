@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Initial release of the local sherpa-onnx / Kokoro TTS plugin for AstrBot.
+- Activation-time background model download with resume, SHA-256 verification,
+  configurable mirror and `terminate()` cancellation.
 - `/tts` slash command with `/语音` and `/朗读` aliases.
 - `sherpa_tts` LLM tool for automatic voice replies.
 - `/tts`-independent model management: fp32 and int8 Kokoro v1.1 downloads

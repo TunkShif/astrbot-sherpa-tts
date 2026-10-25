@@ -15,8 +15,8 @@ ASTRBOT_ROOT=$(mktemp -d) .venv/bin/python -m pytest -q
 当前结果：
 
 ```text
-35 passed, 1 skipped
-coverage: 84%
+48 passed, 1 skipped
+coverage: 83%
 ```
 
 跳过的测试是 `tests/test_real_model.py`，它需要真实模型。
@@ -27,8 +27,9 @@ coverage: 84%
 | --- | --- | --- | --- |
 | L0 纯逻辑 | 无 | 文本清理、分句、句数、动态字数上限、WAV、NaN 清洗 | `tests/test_engine.py` |
 | L1 引擎适配 | 无（fake `sherpa_onnx`） | 配置字段、1.x/2.x 分支、精度选择、WAV 输出 | `tests/test_engine.py` |
-| L2 Handler | `astrbot` wheel | 指令/工具产生 `Record`、错误、限额、冷却、队列、临时文件 | `tests/test_handlers.py` |
+| L2 Handler | `astrbot` wheel | 指令/工具产生 `Record`、错误、限额、冷却、队列、临时文件、自动下载状态 | `tests/test_handlers.py` |
 | L3 注册契约 | `astrbot` | 指令名/别名、LLM 工具 schema、注册表 | `tests/test_registration.py` |
+| L3.5 模型下载 | 无（fake HTTP） | 精度选择、SHA、断点续传、安全解压 | `tests/test_model_download.py` |
 | L4 真实加载 | `astrbot` | metadata、schema、版本、import、实例化、`initialize`、handler 绑定 | `tests/test_plugin_load.py`（子进程） |
 | L5 平台序列化 | `astrbot` | `Record` → OneBot `record` → `send_group_msg` kwargs | `tests/test_onebot_payload.py` |
 | L6 真实模型 | 模型 + 原生库 | 真实 ONNX 推理、24kHz WAV、时长/非空 | `tests/test_real_model.py` |

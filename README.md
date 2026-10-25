@@ -15,7 +15,7 @@
 - **两种触发方式**：`/tts <文本>` 指令，或 LLM 工具 `sherpa_tts`。
 - **适合小机器**：单并发推理、有界排队、每用户冷却、3 句 / 100 字 / 20 秒预算，防止刷 CPU。
 - **临时音频**：WAV 写在 AstrBot 临时目录，消息发送后自动删除，不落插件数据目录。
-- **模型分离**：插件仓库不包含模型；提供 SHA-256 校验的下载脚本，支持 fp32 / int8。
+- **模型分离 + 激活自动下载**：插件仓库不包含模型；首次启用时在后台自动下载（可关闭），也提供 SHA-256 校验的脚本，支持 fp32 / int8。
 - **可配置**：模型目录/精度、音色、语速、线程数、文本限制、冷却与队列全部可在 WebUI 配置。
 - **可测试**：AstrBot 真实 `PluginManager` 离线加载、指令/LLM 工具注册、OneBot payload、真实模型可选测试。
 
@@ -26,7 +26,7 @@
 | AstrBot | `>=4.25,<5`（依赖事件级临时文件 API） |
 | Python | `>=3.12` |
 | 平台 | `aiocqhttp`（NapCat / OneBot v11） |
-| 依赖 | `sherpa-onnx>=1.13,<2`、`numpy>=1.24` |
+| 依赖 | `sherpa-onnx>=1.13,<2`、`numpy>=1.24`、`aiohttp>=3.9` |
 | 模型 | Kokoro `kokoro-multi-lang-v1_1`（单独下载） |
 
 ### 性能参考
@@ -58,9 +58,21 @@ cd <AstrBot>
 
 > 插件依赖固定为 `sherpa-onnx>=1.13,<2`。sherpa-onnx 2.0 移除了 espeak-ng/piper-phonemize，Kokoro 变成纯 lexicon，未收录的英文词会被跳过；v1.13 + full 模型是当前验证过的质量基线。
 
-## 下载模型
+### 激活时会发生什么
 
-插件**不包含模型**。模型放在插件数据目录：
+AstrBot 加载/启用插件时会调用插件的 `initialize()`。插件在这个生命周期里检查默认模型目录：
+
+1. 模型完整：直接可用，不做任何下载。
+2. 模型缺失且 `auto_download_model=true`（默认）：启动一个**后台下载任务**，`initialize()` 立即返回，不阻塞 AstrBot 启动。
+3. 下载进度写入日志（每 10%）；下载完成后自动切换到新模型目录。
+4. 下载期间 `/tts` 会回复“模型正在下载（xx%）”；下载失败后首次 `/tts` 会提示错误，并在约 60 秒后允许重试。
+5. 插件被禁用/卸载时，`terminate()` 会取消下载任务；未完成的 `.part` 文件保留，下次启用会断点续传。
+
+> 只有默认模型目录会自动下载。若手动配置了 `model_dir`，插件认为该目录由用户管理，不会覆盖或写入它。
+
+## 模型下载（自动/手动）
+
+插件**不包含模型**。默认模型放在插件数据目录：
 
 ```text
 <AstrBot>/data/plugin_data/astrbot_plugin_sherpa_tts/models/
@@ -75,7 +87,17 @@ cd <AstrBot>
 └── kokoro-int8-multi-lang-v1_1/     # int8，可选
 ```
 
-### 使用脚本（推荐）
+### 自动下载（默认）
+
+安装并启用插件后，若默认目录没有模型，会自动下载 `fp32`（约 365MB）。想用更小的 `int8`（约 147MB），先把 `model_precision` 设为 `int8` 再重载插件；它会在激活时下载 int8。
+
+如果 GitHub 访问慢，可在配置中设置 `model_download_base_url` 为镜像/代理的 release 前缀，例如：
+
+```text
+https://your-mirror.example/sherpa-onnx/tts-models
+```
+
+### 使用脚本（手动/指定版本）
 
 ```bash
 cd <AstrBot>/data/plugins/astrbot_plugin_sherpa_tts
@@ -116,7 +138,9 @@ tar -xjf kokoro.tar.bz2
 | 配置项 | 默认 | 说明 |
 | --- | --- | --- |
 | `model_dir` | 空 | 留空自动查找 `models/kokoro-multi-lang-v1_1`，再找 `kokoro-int8-multi-lang-v1_1` |
-| `model_precision` | `auto` | `auto` / `fp32` / `int8`；auto 优先 full，缺失时用 int8 |
+| `model_precision` | `auto` | `auto` / `fp32` / `int8`；auto 优先 full，缺失时用 int8；也决定自动下载的版本（auto/fp32→fp32） |
+| `auto_download_model` | `true` | 插件激活时若默认模型目录缺失，后台自动下载；关闭则需手动下载 |
+| `model_download_base_url` | 空 | 模型 release 的镜像/代理前缀，末尾不要加 `/` |
 | `auto_load` | `false` | 启动时预加载模型；关闭则首次合成稍慢 |
 | `load_timeout` | `180` | 预加载超时（秒） |
 | `speaker_id` | `3` | 0–102；3=`zf_001`，58=`zm_009`（第一个中文男声） |
@@ -189,6 +213,13 @@ sherpa-onnx -> 16-bit 24kHz WAV -> Record
 
 ## 故障排查
 
+### 模型正在下载 / 下载失败
+
+- 首次启用时后台下载 147–365MB，期间 `/tts` 会提示百分比；等待完成即可。
+- 下载失败会写日志（`[sherpa-tts] 模型下载失败`），首次 `/tts` 会显示原因；约 60 秒后可重试，或重启插件/手动运行下载脚本。
+- 国内网络可在配置中设置 `model_download_base_url`。
+- 检查 `data/plugin_data/astrbot_plugin_sherpa_tts/models/` 下是否有 `.part` 文件；保留它可断点续传。
+
 ### `模型文件不完整` / `ModelNotReadyError`
 
 检查 `model_dir` 是否指向包含 `model.onnx`（或 `model.int8.onnx`）、`voices.bin`、`tokens.txt`、`lexicon-us-en.txt`、`lexicon-zh.txt` 的目录。使用下载脚本后会打印正确路径。
@@ -233,7 +264,8 @@ cd astrbot_plugin_sherpa_tts
 
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python \
-  "astrbot==4.29.3" "sherpa-onnx>=1.13,<2" numpy pytest pytest-asyncio pytest-cov ruff
+  "astrbot==4.29.3" "sherpa-onnx>=1.13,<2" "aiohttp>=3.9" numpy \
+  pytest pytest-asyncio pytest-cov ruff
 
 ASTRBOT_ROOT=$(mktemp -d) .venv/bin/python -m pytest -q
 ```
@@ -256,6 +288,7 @@ astrbot_plugin_sherpa_tts/
 │   ├── metadata.yaml
 │   ├── _conf_schema.json
 │   ├── requirements.txt
+│   ├── model_download.py      # 激活自动下载 / SHA-256 / 断点续传
 │   └── tts/
 │       ├── engine.py           # sherpa-onnx OfflineTts 封装
 │       ├── text.py             # 分句与 20 秒字数预算
@@ -278,7 +311,7 @@ astrbot_plugin_sherpa_tts/
 - 音色暂用数字 `speaker_id`，尚未提供音色名称列表与 `/tts voice`。
 - 长文本不会自动分段成多条语音；超过 3 句 / 100 字会直接拒绝。
 - 没有持久化任务队列；服务重启会丢失排队中的请求（短任务可接受）。
-- 模型下载脚本依赖 GitHub Release，国内网络可能需要代理或镜像。
+- 自动下载依赖 GitHub Release；国内网络可能需要 `model_download_base_url` 镜像。
 
 ## 许可证
 

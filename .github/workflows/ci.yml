@@ -34,6 +34,7 @@ jobs:
             "astrbot==${{ matrix.astrbot }}" \
             "sherpa-onnx>=1.13,<2" \
             "numpy>=1.24" \
+            "aiohttp>=3.9" \
             pytest pytest-asyncio pytest-cov ruff
 
       - name: Lint
