@@ -97,13 +97,28 @@ def _sha256(path: Path) -> str:
 
 
 def _safe_extract(archive: Path, dest: Path) -> None:
+    # tarfile uses the stdlib bz2 module, not the `tar`/`bzip2` binaries.
+    # Some stripped-down Python builds omit _bz2; report that explicitly.
+    try:
+        __import__("bz2")
+    except ImportError as exc:
+        raise ModelDownloadError(
+            "Python 缺少 bz2 模块，无法解压 .tar.bz2；"
+            "请使用带 bz2 支持的 Python 3.12 镜像（不需要安装 tar 命令）。",
+        ) from exc
+
     dest = dest.resolve()
-    with tarfile.open(archive, "r:bz2") as tar:
-        for member in tar.getmembers():
-            target = (dest / member.name).resolve()
-            if target != dest and dest not in target.parents:
-                raise ModelDownloadError(f"unsafe archive member: {member.name}")
-        tar.extractall(dest, filter="data")
+    try:
+        with tarfile.open(archive, "r:bz2") as tar:
+            for member in tar.getmembers():
+                target = (dest / member.name).resolve()
+                if target != dest and dest not in target.parents:
+                    raise ModelDownloadError(f"unsafe archive member: {member.name}")
+            tar.extractall(dest, filter="data")
+    except ModelDownloadError:
+        raise
+    except (tarfile.TarError, OSError) as exc:
+        raise ModelDownloadError(f"解压模型失败（{archive.name}）：{exc}") from exc
 
 
 async def _download_resumable(
