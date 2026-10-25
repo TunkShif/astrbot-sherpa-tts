@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint & offline tests (AstrBot ${{ matrix.astrbot }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        astrbot: ["4.25.0", "4.29.3"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.13.x"
+
+      - name: Create virtualenv
+        run: uv venv --python 3.12 .venv
+
+      - name: Install dependencies
+        run: |
+          uv pip install --python .venv/bin/python \
+            "astrbot==${{ matrix.astrbot }}" \
+            "sherpa-onnx>=1.13,<2" \
+            "numpy>=1.24" \
+            pytest pytest-asyncio pytest-cov ruff
+
+      - name: Lint
+        run: |
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check .
+
+      - name: Offline tests
+        run: |
+          ASTRBOT_ROOT="$(mktemp -d)" \
+            .venv/bin/python -m pytest -q -m "not model" \
+            --cov=astrbot_plugin_sherpa_tts --cov-report=term-missing
