@@ -49,6 +49,8 @@ cd <AstrBot>/data/plugins
 git clone https://github.com/tunkshif/astrbot_plugin_sherpa_tts.git
 ```
 
+> 本仓库采用 AstrBot 标准插件根目录布局：`metadata.yaml`、`main.py`、`_conf_schema.json` 都在仓库根目录。不要把它们再套一层子目录，否则从 Git 安装会报 “未在仓库根目录找到 metadata.yaml”。
+
 然后在 WebUI 插件页点击 **重载插件**。AstrBot 会读取 `requirements.txt` 并安装依赖；如果自动安装失败，可手动执行：
 
 ```bash
@@ -308,17 +310,17 @@ SHERPA_TTS_MODEL_DIR=<...>/kokoro-multi-lang-v1_1 \
 ## 项目结构
 
 ```text
-astrbot_plugin_sherpa_tts/
-├── astrbot_plugin_sherpa_tts/
-│   ├── main.py                 # 指令、LLM 工具、限额、队列、临时文件
-│   ├── metadata.yaml
-│   ├── _conf_schema.json
-│   ├── requirements.txt
-│   ├── model_download.py      # 激活自动下载 / SHA-256 / 断点续传
-│   └── tts/
-│       ├── engine.py           # sherpa-onnx OfflineTts 封装
-│       ├── text.py             # 分句与 20 秒字数预算
-│       └── audio.py            # WAV 编码与 NaN 清理
+astrbot_plugin_sherpa_tts/                 # 仓库根目录 = AstrBot 插件目录
+├── main.py                   # 指令、LLM 工具、限额、队列、临时文件
+├── metadata.yaml             # AstrBot 在仓库根目录查找此文件
+├── _conf_schema.json
+├── requirements.txt
+├── __init__.py
+├── model_download.py         # 激活自动下载 / SHA-256 / 断点续传
+├── tts/
+│   ├── engine.py             # sherpa-onnx OfflineTts 封装
+│   ├── text.py               # 分句与 20 秒字数预算
+│   └── audio.py              # WAV 编码与 NaN 清理
 ├── scripts/
 │   ├── download_model.py       # SHA-256 模型下载/解压
 │   └── bench_tts.py            # 目标机 RTF 基准

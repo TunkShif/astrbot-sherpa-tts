@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from astrbot.api.message_components import Record
-
 from astrbot_plugin_sherpa_tts.main import SherpaTtsPlugin
 
 from .conftest import FakeEngine, RecordingEvent

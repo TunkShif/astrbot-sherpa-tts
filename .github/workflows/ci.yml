@@ -46,4 +46,4 @@ jobs:
         run: |
           ASTRBOT_ROOT="$(mktemp -d)" \
             .venv/bin/python -m pytest -q -m "not model" \
-            --cov=astrbot_plugin_sherpa_tts --cov-report=term-missing
+            --cov=. --cov-report=term-missing

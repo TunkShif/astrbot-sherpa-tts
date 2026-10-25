@@ -52,8 +52,17 @@ async def main() -> dict:
     plugins = ROOT / "data" / "plugins"
     plugins.mkdir(parents=True)
     shutil.copytree(
-        REPO_ROOT / "astrbot_plugin_sherpa_tts",
+        REPO_ROOT,
         plugins / "astrbot_plugin_sherpa_tts",
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".research",
+            "__pycache__",
+            ".venv",
+            "tests",
+            "scripts",
+            "docs",
+        ),
     )
 
     # The test must never start a real 365MB model download.

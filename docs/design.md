@@ -258,6 +258,7 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
 
 ## 10. 兼容性与平台
 
+- **仓库根目录就是插件目录**：`metadata.yaml`、`main.py`、`_conf_schema.json`、`requirements.txt` 必须位于 Git 仓库根目录；AstrBot 从 Git 安装时会检查根目录的 `metadata.yaml` / `metadata.yml`。不能把这些文件放进子目录。
 - AstrBot 4.25+（临时文件 API），Python 3.12+。
 - `aiocqhttp`：`Record` -> base64 WAV -> NapCat silk。
 - `qq_official`：未适配；它使用 `tencent_silk`，需要单独实现。

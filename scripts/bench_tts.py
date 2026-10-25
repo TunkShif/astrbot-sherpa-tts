@@ -22,8 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from astrbot_plugin_sherpa_tts.tts.engine import SherpaTtsEngine
-from astrbot_plugin_sherpa_tts.tts.text import count_sentences
+from tts.engine import SherpaTtsEngine
+from tts.text import count_sentences
 
 DEFAULT_TEXT = (
     "你好，这是本地语音合成测试。今天天气不错，我们来试试中英文混合。"

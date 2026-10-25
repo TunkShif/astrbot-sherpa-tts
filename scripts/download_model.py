@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from astrbot_plugin_sherpa_tts.model_download import (  # noqa: E402
+from model_download import (  # noqa: E402
     MODELS,
     download_model_sync,
     is_model_complete,

@@ -9,6 +9,7 @@ machine and CI runner clean.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 import tempfile
@@ -16,6 +17,20 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+
+# AstrBot loads the repository root as a plugin package.  The local checkout
+# directory may contain hyphens, so register the package under the canonical
+# plugin name for tests instead of relying on the folder name.
+_PACKAGE = "astrbot_plugin_sherpa_tts"
+_spec = importlib.util.spec_from_file_location(
+    _PACKAGE,
+    REPO_ROOT / "__init__.py",
+    submodule_search_locations=[str(REPO_ROOT)],
+)
+assert _spec and _spec.loader
+_package = importlib.util.module_from_spec(_spec)
+sys.modules[_PACKAGE] = _package
+_spec.loader.exec_module(_package)
 
 os.environ.setdefault("ASTRBOT_ROOT", tempfile.mkdtemp(prefix="astrbot-tts-test-"))
 os.environ.setdefault("TESTING", "true")
@@ -30,7 +45,6 @@ from astrbot.core.platform.astrbot_message import (
 )
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
-
 from astrbot_plugin_sherpa_tts.main import SherpaTtsPlugin
 from astrbot_plugin_sherpa_tts.tts.audio import write_wav
 

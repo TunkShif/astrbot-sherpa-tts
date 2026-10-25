@@ -8,7 +8,6 @@ import tarfile
 from pathlib import Path
 
 import pytest
-
 from astrbot_plugin_sherpa_tts import model_download
 from astrbot_plugin_sherpa_tts.model_download import (
     MODELS,
