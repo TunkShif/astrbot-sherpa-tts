@@ -208,3 +208,121 @@ async def test_config_cap_cannot_exceed_20s_budget(
     plugin.config["max_total_chars"] = 200
     with pytest.raises(TtsError, match="最多 100 字"):
         await plugin._make_record(event, "字" * 101, speed=1.0)
+
+
+@pytest.mark.asyncio
+async def test_first_tts_starts_background_download(
+    plugin: SherpaTtsPlugin,
+    event: RecordingEvent,
+    monkeypatch,
+):
+    import asyncio
+    from contextlib import suppress
+
+    from astrbot_plugin_sherpa_tts import main as main_module
+    from astrbot_plugin_sherpa_tts.tts.engine import TtsError
+
+    plugin._auto_download = True
+    plugin._custom_model_dir = False
+    plugin.engine.missing_files = lambda: ["model.onnx"]
+
+    async def fake_download(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(main_module, "download_model_async", fake_download)
+
+    with pytest.raises(TtsError, match="后台下载"):
+        await plugin._make_record(event, "你好")
+
+    task = plugin._download_task
+    assert task is not None
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_auto_download_disabled_reports_missing_model(
+    plugin: SherpaTtsPlugin,
+    event: RecordingEvent,
+):
+    from astrbot_plugin_sherpa_tts.tts.engine import TtsError
+
+    plugin._auto_download = False
+    plugin.engine.missing_files = lambda: ["model.onnx"]
+
+    with pytest.raises(TtsError, match="模型文件不完整"):
+        await plugin._make_record(event, "你好")
+
+
+@pytest.mark.asyncio
+async def test_initialize_starts_background_download(
+    plugin: SherpaTtsPlugin,
+    monkeypatch,
+):
+    import asyncio
+    from contextlib import suppress
+
+    from astrbot_plugin_sherpa_tts import main as main_module
+
+    plugin._auto_download = True
+    plugin._custom_model_dir = False
+    plugin.engine.missing_files = lambda: ["model.onnx"]
+
+    async def fake_download(*args, **kwargs):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(main_module, "download_model_async", fake_download)
+
+    await plugin.initialize()
+
+    task = plugin._download_task
+    assert task is not None
+    assert not task.done()
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_download_task_updates_engine_and_status(
+    plugin: SherpaTtsPlugin,
+    monkeypatch,
+):
+    from pathlib import Path
+
+    from astrbot_plugin_sherpa_tts import main as main_module
+
+    target = Path("/tmp/fake-kokoro")
+    seen: dict = {}
+
+    async def fake_download(dest, variant, *, base_url=None, progress=None):
+        seen["dest"] = dest
+        seen["variant"] = variant
+        if progress:
+            progress(50, 100)
+        return target
+
+    monkeypatch.setattr(main_module, "download_model_async", fake_download)
+
+    await plugin._download_model()
+
+    assert plugin._download_status == "ready"
+    assert plugin.engine.model_dir == target
+    assert plugin._download_progress == 1.0
+    assert seen["variant"] in {"fp32", "int8"}
+
+
+@pytest.mark.asyncio
+async def test_download_task_records_failure(plugin: SherpaTtsPlugin, monkeypatch):
+    from astrbot_plugin_sherpa_tts import main as main_module
+
+    async def fake_download(*args, **kwargs):
+        raise OSError("network down")
+
+    monkeypatch.setattr(main_module, "download_model_async", fake_download)
+
+    await plugin._download_model()
+
+    assert plugin._download_status == "failed"
+    assert "network down" in plugin._download_error

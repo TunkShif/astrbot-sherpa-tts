@@ -56,6 +56,14 @@ async def main() -> dict:
         plugins / "astrbot_plugin_sherpa_tts",
     )
 
+    # The test must never start a real 365MB model download.
+    config_dir = ROOT / "data" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "astrbot_plugin_sherpa_tts_config.json").write_text(
+        json.dumps({"auto_download_model": False}),
+        encoding="utf-8",
+    )
+
     config = AstrBotConfig()
     config._config_path = str(ROOT / "data" / "cmd_config.json")
     db = SQLiteDatabase(str(ROOT / "data" / "probe.db"))
@@ -108,6 +116,10 @@ async def main() -> dict:
 
     class Engine:
         speed = 1.0
+        precision = "auto"
+
+        def missing_files(self):
+            return []
 
         async def synthesize_async(
             self, text, out_path, *, speaker_id=None, speed=None

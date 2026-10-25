@@ -70,9 +70,13 @@ class FakeEngine:
 
     model_dir = Path("/nonexistent")
     speed = 1.0
+    precision = "auto"
 
     def __init__(self) -> None:
         self.calls: list[dict] = []
+
+    def missing_files(self) -> list[str]:
+        return []
 
     async def synthesize_async(self, text, out_path, *, speaker_id=None, speed=None):
         self.calls.append(
