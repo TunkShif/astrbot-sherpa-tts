@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - 2026-10-25
 
+### Fixed
+
+- Git installation now finds `metadata.yaml` at the repository root; the
+  plugin uses AstrBot's standard root-level layout (`main.py`, schema,
+  requirements and `tts/` are no longer nested in a subdirectory).
+
 ### Added
 
 - Initial release of the local sherpa-onnx / Kokoro TTS plugin for AstrBot.

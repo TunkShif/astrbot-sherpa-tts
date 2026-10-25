@@ -49,7 +49,7 @@ cd <AstrBot>/data/plugins
 git clone https://github.com/tunkshif/astrbot_plugin_sherpa_tts.git
 ```
 
-> 本仓库采用 AstrBot 标准插件根目录布局：`metadata.yaml`、`main.py`、`_conf_schema.json` 都在仓库根目录。不要把它们再套一层子目录，否则从 Git 安装会报 “未在仓库根目录找到 metadata.yaml”。
+> 本仓库采用 AstrBot 标准插件根目录布局：`metadata.yaml`、`main.py`、`_conf_schema.json` 都在仓库根目录。不要把它们再套一层子目录，否则从 Git 安装会报 “未在仓库根目录找到 metadata.yaml”。Git 仓库名建议使用 `astrbot_plugin_sherpa_tts`（下划线），避免目录名中的连字符影响 Python 模块导入。
 
 然后在 WebUI 插件页点击 **重载插件**。AstrBot 会读取 `requirements.txt` 并安装依赖；如果自动安装失败，可手动执行：
 
