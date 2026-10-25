@@ -1,0 +1,26 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+  "slow: loads AstrBot's real PluginManager in a subprocess",
+  "model: requires SHERPA_TTS_MODEL_DIR with the real Kokoro model",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = [".research", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "C4", "ASYNC", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["astrbot_plugin_sherpa_tts"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]
+"tests/*" = ["ASYNC240"]

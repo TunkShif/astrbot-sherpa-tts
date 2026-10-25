@@ -1,0 +1,5 @@
+# v1.x keeps the espeak-ng fallback for OOV English words. sherpa-onnx 2.0
+# removed espeak-ng/piper-phonemize and makes Kokoro lexicon-only; the code
+# supports both, but v1.13 + the full model is the tested quality baseline.
+sherpa-onnx>=1.13.0,<2.0.0
+numpy>=1.24

@@ -1,0 +1,16 @@
+name: astrbot_plugin_sherpa_tts
+display_name: 本地语音合成 (sherpa-onnx)
+short_desc: 用本地 Kokoro 模型把文字变成 QQ 语音，支持指令与 LLM 工具调用
+desc: 基于 sherpa-onnx + Kokoro 多语言模型的离线 TTS 插件，不依赖云端 API。支持 /tts 指令和 sherpa_tts LLM 工具，自动把生成的 WAV 作为语音消息发送。
+version: v0.1.0
+author: tunkshif
+repo: https://github.com/tunkshif/astrbot_plugin_sherpa_tts
+astrbot_version: ">=4.25,<5"
+support_platforms:
+  - aiocqhttp
+tags:
+  - tts
+  - voice
+  - sherpa-onnx
+  - local
+  - aiocqhttp

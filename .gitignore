@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local research / benchmarks
+.research/
+models/
+*.wav
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
