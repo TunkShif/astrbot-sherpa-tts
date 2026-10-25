@@ -215,6 +215,27 @@ image-generation 插件需要 job system，因为：外部 API 可能几十秒�
   - 实测 1.13.8 + int8 对某些 OOV 英文可出现 NaN；full 未出现；代码仍有 `nan_to_num` 兜底。
 - 首次使用模型缺失时返回可操作的错误，不在请求路径里隐式下载。
 
+## 7.1 Docker / 无 Linux CLI 依赖
+
+下载/解压链路只使用 Python：
+
+| 步骤 | 依赖 | 是否需要系统命令 |
+| --- | --- | --- |
+| HTTP 流式下载 | `aiohttp`（AstrBot 已有） | 否 |
+| 断点续传 | HTTP `Range` | 否 |
+| SHA-256 | `hashlib` | 否 |
+| `.tar.bz2` 解压 | `tarfile` + `bz2`（stdlib） | 否 |
+| 安全路径检查 | `pathlib` / `tarfile` 成员检查 | 否 |
+| staging -> final | `shutil.move` / `rmtree` | 否 |
+
+约束：
+
+- Python 构建必须包含 `bz2`（`_bz2`）。官方 `python:3.12-slim`/`python:3.12-alpine` 通常包含；如果被裁剪，插件会返回明确错误，换镜像即可，不需要 `tar`/`bzip2` 命令。
+- `data/plugin_data/.../models` 与 `data/temp` 必须可写；Docker 中应挂载 `data/` 持久卷。
+- 峰值磁盘：fp32 约 365MB `.part` + 419MB 解压目录 ≈ 800MB；int8 约 147MB + 210MB ≈ 360MB。完成后 `.part` 删除，只保留模型目录。
+- AstrBot 侧不需要 ffmpeg；WAV 输入直接 base64。NapCat 侧仍需其自带 ffmpeg/silk 能力。
+- 原生依赖是 `sherpa-onnx` wheel（glibc/manylinux 或平台 wheel），与 CLI 工具无关；极简 Alpine 需要确认 wheel 兼容性。
+
 ## 8. 配置
 
 完整表格见 [README 配置](../README.md#配置)。设计上分四组：

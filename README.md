@@ -70,6 +70,32 @@ AstrBot 加载/启用插件时会调用插件的 `initialize()`。插件在这�
 
 > 只有默认模型目录会自动下载。若手动配置了 `model_dir`，插件认为该目录由用户管理，不会覆盖或写入它。
 
+### Docker / 无 CLI 依赖
+
+下载和解压**不需要 `curl`、`wget`、`tar`、`unzip` 或 `bzip2` 命令**：
+
+| 操作 | 实现 |
+| --- | --- |
+| HTTP 下载 | `aiohttp`（AstrBot 已有依赖，插件 requirements 也显式声明） |
+| 断点续传 | HTTP `Range` |
+| 解压 `.tar.bz2` | Python 标准库 `tarfile` + `bz2` |
+| 校验 | 标准库 `hashlib`（SHA-256） |
+| 目录替换 | 标准库 `shutil` / `pathlib` |
+
+Docker 部署注意事项：
+
+- 确认 Python 带 `bz2` 模块（官方 `python:3.12-slim` 通常自带）：
+
+  ```bash
+  docker exec -it <astrbot-container> python -c "import bz2, tarfile; print('ok')"
+  ```
+
+  如果缺少，会得到明确的“Python 缺少 bz2 模块”错误；换一个带 bz2 的 Python 镜像即可，不需要安装 Linux 命令。
+- `data/plugin_data` 和 `data/temp` 必须可写。建议把 AstrBot 的 `data/` 挂载为持久卷，否则容器重建后模型会重新下载。
+- 磁盘峰值（下载 + 解压）：fp32 约 **800MB**，int8 约 **360MB**；完成后压缩包/临时文件会删除，只保留模型目录。
+- AstrBot 容器本身不需要 ffmpeg；QQ 语音的 silk 转码由 NapCat 负责。若 NapCat 在另一个精简容器里，请确保 NapCat 自带 ffmpeg/silk 支持。
+- Docker 内访问 GitHub 慢时，设置 `model_download_base_url` 指向可访问的镜像。
+
 ## 模型下载（自动/手动）
 
 插件**不包含模型**。默认模型放在插件数据目录：
@@ -115,7 +141,7 @@ cd <AstrBot>/data/plugins/astrbot_plugin_sherpa_tts
 
 脚本会校验官方 release 的 SHA-256、安全解压，并打印应填入的 `model_dir`。
 
-### 手动下载
+### 手动下载（使用 curl/tar；不想用 CLI 请用自动下载或脚本）
 
 ```bash
 mkdir -p <AstrBot>/data/plugin_data/astrbot_plugin_sherpa_tts/models
